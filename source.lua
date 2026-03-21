@@ -1,5 +1,5 @@
-local UI = {}
-UI.__index = UI
+local Eru = {}
+Eru.__index = Eru
 
 local Window = {}
 Window.__index = Window
@@ -8,8 +8,17 @@ local TweenService     = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 local Players          = game:GetService("Players")
 
-local T_FAST = TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
-local T_MED  = TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+local T_FAST  = TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+local T_MED   = TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+local T_DRAG  = TweenInfo.new(0.07, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+
+local COL_INACTIVE  = Color3.fromRGB(100, 100, 100)
+local COL_ACTIVE    = Color3.fromRGB(245, 245, 245)
+local COL_HOVER     = Color3.fromRGB(180, 180, 180)
+local COL_ELEM_TEXT = Color3.fromRGB(150, 150, 150)
+local COL_SEC_TEXT  = Color3.fromRGB(245, 245, 245)
+local COL_TOGGLE_ON = Color3.fromRGB(206, 206, 255)
+local COL_TOGGLE_OFF= Color3.fromRGB(30,  30,  35)
 
 local function make(class, props, parent)
 	local inst = Instance.new(class)
@@ -28,10 +37,7 @@ local function getParent()
 	if typeof(gethui) == "function" then
 		return gethui()
 	end
-
-	local ok, core = pcall(function()
-		return game:GetService("CoreGui")
-	end)
+	local ok, core = pcall(game.GetService, game, "CoreGui")
 	if ok and core then
 		local canUse = pcall(function()
 			local f = Instance.new("Frame")
@@ -40,12 +46,12 @@ local function getParent()
 		end)
 		if canUse then return core end
 	end
-
 	return Players.LocalPlayer:WaitForChild("PlayerGui")
 end
 
 local function makeDraggable(frame, handle)
-	local dragging, dragStart, startPos = false
+	local dragging = false
+	local dragStart, startPos
 
 	handle.InputBegan:Connect(function(input)
 		if input.UserInputType ~= Enum.UserInputType.MouseButton1
@@ -66,7 +72,7 @@ local function makeDraggable(frame, handle)
 		if input.UserInputType ~= Enum.UserInputType.MouseMovement
 			and input.UserInputType ~= Enum.UserInputType.Touch then return end
 		local d = input.Position - dragStart
-		tw(frame, TweenInfo.new(0.07, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+		tw(frame, T_DRAG, {
 			Position = UDim2.new(
 				startPos.X.Scale, startPos.X.Offset + d.X,
 				startPos.Y.Scale, startPos.Y.Offset + d.Y
@@ -75,46 +81,117 @@ local function makeDraggable(frame, handle)
 	end)
 end
 
-function UI.new(cfg)
-	local self = setmetatable({}, UI)
+Eru.gui = make("ScreenGui", {
+	Name         = "Eru",
+	Enabled      = true,
+	ResetOnSpawn = false,
+}, getParent())
+
+function Eru:Window(cfg)
 	cfg = cfg or {}
 
-	self.gui = make("ScreenGui", {
-		Name         = cfg.Name or "Library",
-		Enabled      = cfg.Enabled ~= nil and cfg.Enabled or true,
-		ResetOnSpawn = false,
-	}, getParent())
-
-	self.windows = {}
-	return self
-end
-
-function UI:Window(cfg)
-	cfg = cfg or {}
-
-	local win      = setmetatable({}, Window)
-	win.tabs       = {}
-	win.activeTab  = nil
-
-	local defaultPos = cfg.Position or UDim2.new(0.5, -216, 0.5, -230)
-	local defaultSize = cfg.Size or UDim2.new(0, 432, 0, 460)
+	local win     = setmetatable({}, Window)
+	win.activeTab = nil
+	win.tabs      = {}
 
 	win.frame = make("Frame", {
-		Name             = cfg.Name or "Window",
+		Name             = cfg.Title or "Window",
 		BackgroundColor3 = Color3.fromRGB(18, 18, 22),
-		BorderSizePixel  = 0,
-		Position         = defaultPos,
-		Size             = defaultSize,
+		Position         = cfg.Position or UDim2.new(0.5, -216, 0.5, -230),
+		Size             = cfg.Size or UDim2.new(0, 432, 0, 460),
 	}, self.gui)
 
 	make("UICorner", { CornerRadius = UDim.new(0, 10) }, win.frame)
 
-	win.tabBar = make("Frame", {
-		Name                  = "TabBar",
-		BackgroundTransparency = 1,
-		BorderSizePixel       = 0,
-		Size                  = UDim2.new(1, 0, 0, 40),
+	-- scrollable tab bar: tabScroll clips and scrolls, tabBar sizes to content
+	local tabScroll = make("ScrollingFrame", {
+		Name                     = "TabScroll",
+		BackgroundTransparency   = 1,
+		BorderSizePixel          = 0,
+		Position                 = UDim2.new(0, 70, 0, 0),
+		Size                     = UDim2.new(1, -70, 0, 40),
+		CanvasSize               = UDim2.new(0, 0, 0, 0),
+		ScrollBarThickness       = 0,
+		ScrollingDirection       = Enum.ScrollingDirection.X,
+		AutomaticCanvasSize      = Enum.AutomaticSize.X,
+		ClipsDescendants         = true,
+		HorizontalScrollBarInset = Enum.ScrollBarInset.None,
 	}, win.frame)
+
+	local ARROW_ICON        = "rbxassetid://71360692162061"
+	local ARROW_SIZE        = UDim2.new(0, 16, 0, 16)
+	local ARROW_COL         = Color3.fromRGB(100, 100, 100)
+	local ARROW_COL_HOVER   = Color3.fromRGB(200, 200, 200)
+	local SCROLL_STEP       = 60
+
+	local btnLeft = make("ImageButton", {
+		Name                   = "ArrowLeft",
+		Image                  = ARROW_ICON,
+		ImageColor3            = ARROW_COL,
+		Rotation               = 180,
+		BackgroundTransparency = 1,
+		AnchorPoint            = Vector2.new(0, 0.5),
+		Position               = UDim2.new(0, 68, 0.5, 0),
+		Size                   = ARROW_SIZE,
+		Visible                = false,
+		ZIndex                 = 2,
+	}, win.frame)
+
+	local btnRight = make("ImageButton", {
+		Name                   = "ArrowRight",
+		Image                  = ARROW_ICON,
+		ImageColor3            = ARROW_COL,
+		Rotation               = 0,
+		BackgroundTransparency = 1,
+		AnchorPoint            = Vector2.new(1, 0.5),
+		Position               = UDim2.new(1, -4, 0.5, 0),
+		Size                   = ARROW_SIZE,
+		Visible                = false,
+		ZIndex                 = 2,
+	}, win.frame)
+
+	local function updateArrows()
+		local canvasW  = tabScroll.AbsoluteCanvasSize.X
+		local frameW   = tabScroll.AbsoluteSize.X
+		local overflow = canvasW > frameW + 1
+		local atLeft   = tabScroll.CanvasPosition.X <= 0
+		local atRight  = tabScroll.CanvasPosition.X >= canvasW - frameW - 1
+
+		btnLeft.Visible  = overflow and not atLeft
+		btnRight.Visible = overflow and not atRight
+
+		local leftOff  = btnLeft.Visible  and 22 or 0
+		local rightOff = btnRight.Visible and 22 or 0
+		tabScroll.Position = UDim2.new(0, 70 + leftOff, 0, 0)
+		tabScroll.Size     = UDim2.new(1, -70 - leftOff - rightOff, 0, 40)
+	end
+
+	btnLeft.MouseButton1Click:Connect(function()
+		local pos = math.max(0, tabScroll.CanvasPosition.X - SCROLL_STEP)
+		tw(tabScroll, T_FAST, { CanvasPosition = Vector2.new(pos, 0) })
+	end)
+
+	btnRight.MouseButton1Click:Connect(function()
+		local max = tabScroll.AbsoluteCanvasSize.X - tabScroll.AbsoluteSize.X
+		local pos = math.min(max, tabScroll.CanvasPosition.X + SCROLL_STEP)
+		tw(tabScroll, T_FAST, { CanvasPosition = Vector2.new(pos, 0) })
+	end)
+
+	btnLeft.MouseEnter:Connect(function()  tw(btnLeft,  T_FAST, { ImageColor3 = ARROW_COL_HOVER }) end)
+	btnLeft.MouseLeave:Connect(function()  tw(btnLeft,  T_FAST, { ImageColor3 = ARROW_COL }) end)
+	btnRight.MouseEnter:Connect(function() tw(btnRight, T_FAST, { ImageColor3 = ARROW_COL_HOVER }) end)
+	btnRight.MouseLeave:Connect(function() tw(btnRight, T_FAST, { ImageColor3 = ARROW_COL }) end)
+
+	tabScroll:GetPropertyChangedSignal("CanvasPosition"):Connect(updateArrows)
+	tabScroll:GetPropertyChangedSignal("AbsoluteCanvasSize"):Connect(updateArrows)
+	tabScroll:GetPropertyChangedSignal("AbsoluteSize"):Connect(updateArrows)
+
+	win.tabBar = make("Frame", {
+		Name                   = "TabBar",
+		BackgroundTransparency = 1,
+		Size                   = UDim2.new(0, 0, 1, 0),
+		AutomaticSize          = Enum.AutomaticSize.X,
+	}, tabScroll)
 
 	make("UIListLayout", {
 		FillDirection     = Enum.FillDirection.Horizontal,
@@ -123,14 +200,28 @@ function UI:Window(cfg)
 		VerticalAlignment = Enum.VerticalAlignment.Center,
 	}, win.tabBar)
 
-	make("UIPadding", { PaddingLeft = UDim.new(0, 8) }, win.tabBar)
+	make("UIPadding", { PaddingLeft = UDim.new(0, 8), PaddingRight = UDim.new(0, 8) }, win.tabBar)
+
+	local titleLabel = make("TextLabel", {
+		Name                   = "Title",
+		Font                   = Enum.Font.GothamMedium,
+		Text                   = cfg.Title or "EruUI",
+		TextColor3             = COL_ACTIVE,
+		TextSize               = 13,
+		TextXAlignment         = Enum.TextXAlignment.Left,
+		BackgroundTransparency = 1,
+		Position               = UDim2.new(0.023, 0, 0.011, 0),
+		Size                   = UDim2.new(0, 56, 0, 30),
+		LayoutOrder            = 0,
+	}, win.frame)
+
+	make("UIPadding", { PaddingLeft = UDim.new(0, 5) }, titleLabel)
 
 	win.contentHolder = make("Frame", {
-		Name                  = "ContentHolder",
+		Name                   = "ContentHolder",
 		BackgroundTransparency = 1,
-		BorderSizePixel       = 0,
-		Position              = UDim2.new(0, 0, 0, 40),
-		Size                  = UDim2.new(1, 0, 1, -40),
+		Position               = UDim2.new(0, 0, 0, 40),
+		Size                   = UDim2.new(1, 0, 1, -40),
 	}, win.frame)
 
 	make("UIPadding", {
@@ -141,11 +232,10 @@ function UI:Window(cfg)
 	}, win.contentHolder)
 
 	makeDraggable(win.frame, win.tabBar)
-	table.insert(self.windows, win)
 	return win
 end
 
-function UI:Destroy()
+function Eru:Destroy()
 	self.gui:Destroy()
 end
 
@@ -156,19 +246,18 @@ function Window:Tab(cfg)
 	local tabIndex = #self.tabs + 1
 
 	local label = make("TextLabel", {
-		Name                  = "Tab_" .. (cfg.Name or "Tab"),
-		Font                  = Enum.Font.GothamMedium,
-		Text                  = cfg.Name or "Tab",
-		TextColor3            = Color3.fromRGB(100, 100, 100),
-		TextSize              = 13,
+		Name                   = "Tab_" .. (cfg.Name or "Tab"),
+		Font                   = Enum.Font.GothamMedium,
+		Text                   = cfg.Name or "Tab",
+		TextColor3             = COL_INACTIVE,
+		TextSize               = 13,
 		BackgroundTransparency = 1,
-		Size                  = UDim2.new(0, 56, 0, 30),
-		LayoutOrder           = tabIndex,
+		Size                   = UDim2.new(0, 56, 0, 30),
+		LayoutOrder            = tabIndex,
 	}, self.tabBar)
 
 	local indicator = make("Frame", {
-		BackgroundColor3 = Color3.fromRGB(255, 255, 255),
-		BorderSizePixel  = 0,
+		BackgroundColor3 = COL_ACTIVE,
 		Position         = UDim2.new(0.5, -7, 1, -2),
 		Size             = UDim2.new(0, 14, 0, 2),
 		Visible          = false,
@@ -177,12 +266,11 @@ function Window:Tab(cfg)
 	make("UICorner", { CornerRadius = UDim.new(1, 0) }, indicator)
 
 	local colHolder = make("CanvasGroup", {
-		Name                  = "ColHolder",
+		Name                   = "ColHolder",
 		BackgroundTransparency = 1,
-		BorderSizePixel       = 0,
-		GroupTransparency     = 1,
-		Size                  = UDim2.new(1, 0, 1, 0),
-		Visible               = false,
+		GroupTransparency      = 1,
+		Size                   = UDim2.new(1, 0, 1, 0),
+		Visible                = false,
 	}, self.contentHolder)
 
 	make("UIListLayout", {
@@ -193,41 +281,24 @@ function Window:Tab(cfg)
 	}, colHolder)
 
 	local leftFrame = make("Frame", {
-		Name                  = "LeftCol",
+		Name                   = "LeftCol",
 		BackgroundTransparency = 1,
-		BorderSizePixel       = 0,
-		Size                  = UDim2.new(0.5, -5, 1, 0),
-		LayoutOrder           = 1,
+		Size                   = UDim2.new(0.5, -5, 1, 0),
+		LayoutOrder            = 1,
 	}, colHolder)
 
-	make("UIListLayout", {
-		Padding   = UDim.new(0, 9),
-		SortOrder = Enum.SortOrder.LayoutOrder,
-	}, leftFrame)
-
-	make("UIPadding", {
-		PaddingLeft  = UDim.new(0, 1),
-		PaddingRight = UDim.new(0, 1),
-		PaddingTop   = UDim.new(0, 1),
-	}, leftFrame)
+	make("UIListLayout", { Padding = UDim.new(0, 9), SortOrder = Enum.SortOrder.LayoutOrder }, leftFrame)
+	make("UIPadding", { PaddingLeft = UDim.new(0, 1), PaddingRight = UDim.new(0, 1), PaddingTop = UDim.new(0, 1) }, leftFrame)
 
 	local rightFrame = make("Frame", {
-		Name                  = "RightCol",
+		Name                   = "RightCol",
 		BackgroundTransparency = 1,
-		BorderSizePixel       = 0,
-		Size                  = UDim2.new(0.5, -5, 1, 0),
-		LayoutOrder           = 2,
+		Size                   = UDim2.new(0.5, -5, 1, 0),
+		LayoutOrder            = 2,
 	}, colHolder)
 
-	make("UIListLayout", {
-		Padding   = UDim.new(0, 9),
-		SortOrder = Enum.SortOrder.LayoutOrder,
-	}, rightFrame)
-
-	make("UIPadding", {
-		PaddingRight = UDim.new(0, 1),
-		PaddingTop   = UDim.new(0, 1),
-	}, rightFrame)
+	make("UIListLayout", { Padding = UDim.new(0, 9), SortOrder = Enum.SortOrder.LayoutOrder }, rightFrame)
+	make("UIPadding", { PaddingRight = UDim.new(0, 1), PaddingTop = UDim.new(0, 1) }, rightFrame)
 
 	local tab = {
 		label        = label,
@@ -247,13 +318,13 @@ function Window:Tab(cfg)
 			prev.indicator.Size              = UDim2.new(0, 14, 0, 2)
 			prev.colHolder.Visible           = false
 			prev.colHolder.GroupTransparency = 1
-			tw(prev.label, T_FAST, { TextColor3 = Color3.fromRGB(100, 100, 100) })
+			tw(prev.label, T_FAST, { TextColor3 = COL_INACTIVE })
 		end
 
 		indicator.Visible           = true
 		colHolder.GroupTransparency = 1
 		colHolder.Visible           = true
-		tw(label,     T_FAST, { TextColor3 = Color3.fromRGB(245, 245, 245) })
+		tw(label,     T_FAST, { TextColor3 = COL_ACTIVE })
 		tw(colHolder, T_MED,  { GroupTransparency = 0 })
 
 		win.activeTab = tab
@@ -268,13 +339,13 @@ function Window:Tab(cfg)
 
 	label.MouseEnter:Connect(function()
 		if win.activeTab ~= tab then
-			tw(label, T_FAST, { TextColor3 = Color3.fromRGB(180, 180, 180) })
+			tw(label, T_FAST, { TextColor3 = COL_HOVER })
 		end
 	end)
 
 	label.MouseLeave:Connect(function()
 		if win.activeTab ~= tab then
-			tw(label, T_FAST, { TextColor3 = Color3.fromRGB(100, 100, 100) })
+			tw(label, T_FAST, { TextColor3 = COL_INACTIVE })
 		end
 	end)
 
@@ -291,7 +362,6 @@ function Window:Tab(cfg)
 		local sectionFrame = make("Frame", {
 			Name             = "Section_" .. (scfg.Name or "Section"),
 			BackgroundColor3 = Color3.fromRGB(21, 21, 26),
-			BorderSizePixel  = 0,
 			Size             = UDim2.new(1, 0, 0, 32),
 			LayoutOrder      = self.sectionCount,
 		}, parentCol)
@@ -300,22 +370,21 @@ function Window:Tab(cfg)
 		make("UIStroke", { Color = Color3.fromRGB(60, 60, 66) }, sectionFrame)
 
 		make("TextLabel", {
-			Font                  = Enum.Font.GothamMedium,
-			Text                  = scfg.Name or "Section",
-			TextColor3            = Color3.fromRGB(245, 245, 245),
-			TextSize              = 13,
-			TextXAlignment        = Enum.TextXAlignment.Left,
+			Font                   = Enum.Font.GothamMedium,
+			Text                   = scfg.Name or "Section",
+			TextColor3             = COL_SEC_TEXT,
+			TextSize               = 13,
+			TextXAlignment         = Enum.TextXAlignment.Left,
 			BackgroundTransparency = 1,
-			Position              = UDim2.new(0, 10, 0, 0),
-			Size                  = UDim2.new(1, -10, 0, 32),
+			Position               = UDim2.new(0, 10, 0, 0),
+			Size                   = UDim2.new(1, -10, 0, 32),
 		}, sectionFrame)
 
 		local content = make("Frame", {
-			Name                  = "Content",
+			Name                   = "Content",
 			BackgroundTransparency = 1,
-			BorderSizePixel       = 0,
-			Position              = UDim2.new(0, 0, 0, 32),
-			Size                  = UDim2.new(1, 0, 0, 0),
+			Position               = UDim2.new(0, 0, 0, 32),
+			Size                   = UDim2.new(1, 0, 0, 0),
 		}, sectionFrame)
 
 		local layout = make("UIListLayout", {
@@ -326,12 +395,11 @@ function Window:Tab(cfg)
 
 		local itemCount = 0
 
-		-- use AbsoluteContentSize directly from the layout, no child loop
 		local function recalc()
-			local childH = layout.AbsoluteContentSize.Y
-			local pad = childH > 0 and 10 or 0
-			sectionFrame.Size = UDim2.new(1, 0, 0, 32 + childH + pad)
-			content.Size      = UDim2.new(1, 0, 0, childH + pad)
+			local h = layout.AbsoluteContentSize.Y
+			local pad = h > 0 and 10 or 0
+			sectionFrame.Size = UDim2.new(1, 0, 0, 32 + h + pad)
+			content.Size      = UDim2.new(1, 0, 0, h + pad)
 		end
 
 		layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(recalc)
@@ -343,16 +411,14 @@ function Window:Tab(cfg)
 			itemCount = itemCount + 1
 
 			local btn = make("TextButton", {
-				Name                  = "Button_" .. (bcfg.Name or "Button"),
-				Font                  = Enum.Font.GothamMedium,
-				Text                  = bcfg.Name or "Button",
-				TextColor3            = Color3.fromRGB(245, 245, 245),
-				TextSize              = 12,
-				BackgroundColor3      = Color3.fromRGB(108, 108, 134),
+				Name                   = "Button_" .. (bcfg.Name or "Button"),
+				Font                   = Enum.Font.GothamMedium,
+				Text                   = bcfg.Name or "Button",
+				TextColor3             = COL_ELEM_TEXT,
+				TextSize               = 12,
 				BackgroundTransparency = 1,
-				BorderSizePixel       = 0,
-				Size                  = UDim2.new(1, -16, 0, 20),
-				LayoutOrder           = itemCount,
+				Size                   = UDim2.new(1, -16, 0, 20),
+				LayoutOrder            = itemCount,
 			}, content)
 
 			make("UIStroke", {
@@ -380,32 +446,28 @@ function Window:Tab(cfg)
 			tcfg = tcfg or {}
 			itemCount = itemCount + 1
 
-			local state     = tcfg.Default or false
-			local OFF_COLOR = Color3.fromRGB(30, 30, 35)
-			local ON_COLOR  = Color3.fromRGB(206, 206, 255)
+			local state = tcfg.Default or false
 
 			local row = make("Frame", {
-				Name                  = "Toggle_" .. (tcfg.Name or "Toggle"),
+				Name                   = "Toggle_" .. (tcfg.Name or "Toggle"),
 				BackgroundTransparency = 1,
-				BorderSizePixel       = 0,
-				Size                  = UDim2.new(1, -16, 0, 20),
-				LayoutOrder           = itemCount,
+				Size                   = UDim2.new(1, -16, 0, 20),
+				LayoutOrder            = itemCount,
 			}, content)
 
 			make("TextLabel", {
-				Font                  = Enum.Font.GothamMedium,
-				Text                  = tcfg.Name or "Toggle",
-				TextColor3            = Color3.fromRGB(245, 245, 245),
-				TextSize              = 12,
-				TextXAlignment        = Enum.TextXAlignment.Left,
+				Font                   = Enum.Font.GothamMedium,
+				Text                   = tcfg.Name or "Toggle",
+				TextColor3             = COL_ELEM_TEXT,
+				TextSize               = 12,
+				TextXAlignment         = Enum.TextXAlignment.Left,
 				BackgroundTransparency = 1,
-				Size                  = UDim2.new(1, -19, 1, 0),
+				Size                   = UDim2.new(1, -19, 1, 0),
 			}, row)
 
 			local box = make("Frame", {
 				Name             = "Box",
-				BackgroundColor3 = state and ON_COLOR or OFF_COLOR,
-				BorderSizePixel  = 0,
+				BackgroundColor3 = state and COL_TOGGLE_ON or COL_TOGGLE_OFF,
 				AnchorPoint      = Vector2.new(1, 0.5),
 				Position         = UDim2.new(1, 0, 0.5, 0),
 				Size             = UDim2.new(0, 14, 0, 14),
@@ -416,7 +478,7 @@ function Window:Tab(cfg)
 
 			local function setState(val)
 				state = val
-				tw(box, T_FAST, { BackgroundColor3 = state and ON_COLOR or OFF_COLOR })
+				tw(box, T_FAST, { BackgroundColor3 = state and COL_TOGGLE_ON or COL_TOGGLE_OFF })
 				if tcfg.Callback then tcfg.Callback(state) end
 			end
 
@@ -441,4 +503,4 @@ function Window:Tab(cfg)
 	return tab
 end
 
-return UI
+return Eru
