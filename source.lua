@@ -247,9 +247,9 @@ function Window:Tab(cfg)
 	local tabIndex = #self.tabs + 1
 
 	local label = make("TextLabel", {
-		Name                   = "Tab_" .. (cfg.Name or "Tab"),
+		Name                   = "Tab_" .. (cfg.Title or "Tab"),
 		Font                   = Enum.Font.GothamMedium,
-		Text                   = cfg.Name or "Tab",
+		Text                   = cfg.Title or "Tab",
 		TextColor3             = COL_INACTIVE,
 		TextSize               = 13,
 		BackgroundTransparency = 1,
@@ -368,7 +368,7 @@ function Window:Tab(cfg)
 			or rightFrame
 
 		local sectionFrame = make("Frame", {
-			Name             = "Section_" .. (scfg.Name or "Section"),
+			Name             = "Section_" .. (scfg.Title or "Section"),
 			BackgroundColor3 = Color3.fromRGB(21, 21, 26),
 			Size             = UDim2.new(1, 0, 0, 32),
 			LayoutOrder      = self.sectionCount,
@@ -379,7 +379,7 @@ function Window:Tab(cfg)
 
 		make("TextLabel", {
 			Font                   = Enum.Font.GothamMedium,
-			Text                   = scfg.Name or "Section",
+			Text                   = scfg.Title or "Section",
 			TextColor3             = COL_SEC_TEXT,
 			TextSize               = 13,
 			TextXAlignment         = Enum.TextXAlignment.Left,
@@ -419,9 +419,9 @@ function Window:Tab(cfg)
 			itemCount = itemCount + 1
 
 			local btn = make("TextButton", {
-				Name                   = "Button_" .. (bcfg.Name or "Button"),
+				Name                   = "Button_" .. (bcfg.Title or "Button"),
 				Font                   = Enum.Font.GothamMedium,
-				Text                   = bcfg.Name or "Button",
+				Text                   = bcfg.Title or "Button",
 				TextColor3             = COL_ELEM_TEXT,
 				TextSize               = 12,
 				BackgroundTransparency = 1,
@@ -457,7 +457,7 @@ function Window:Tab(cfg)
 			local state = tcfg.Default or false
 
 			local row = make("Frame", {
-				Name                   = "Toggle_" .. (tcfg.Name or "Toggle"),
+				Name                   = "Toggle_" .. (tcfg.Title or "Toggle"),
 				BackgroundTransparency = 1,
 				Size                   = UDim2.new(1, -16, 0, 20),
 				LayoutOrder            = itemCount,
@@ -465,7 +465,7 @@ function Window:Tab(cfg)
 
 			make("TextLabel", {
 				Font                   = Enum.Font.GothamMedium,
-				Text                   = tcfg.Name or "Toggle",
+				Text                   = tcfg.Title or "Toggle",
 				TextColor3             = COL_ELEM_TEXT,
 				TextSize               = 12,
 				TextXAlignment         = Enum.TextXAlignment.Left,
