@@ -34,11 +34,11 @@ local function tw(obj, info, props)
 end
 
 local function getParent()
-	if typeof(gethui) == "function" then
-		return gethui()
-	end
-	local ok, core = pcall(game.GetService, game, "CoreGui")
-	if ok and core then
+	local ok, hui = pcall(function() return gethui() end)
+	if ok and hui then return hui end
+
+	local coreOk, core = pcall(game.GetService, game, "CoreGui")
+	if coreOk and core then
 		local canUse = pcall(function()
 			local f = Instance.new("Frame")
 			f.Parent = core
@@ -46,6 +46,7 @@ local function getParent()
 		end)
 		if canUse then return core end
 	end
+
 	return Players.LocalPlayer:WaitForChild("PlayerGui")
 end
 
@@ -108,8 +109,8 @@ function Eru:Window(cfg)
 		Name                     = "TabScroll",
 		BackgroundTransparency   = 1,
 		BorderSizePixel          = 0,
-		Position                 = UDim2.new(0, 70, 0, 0),
-		Size                     = UDim2.new(1, -70, 0, 40),
+		Position                 = UDim2.new(0, 0, 0, 0),
+		Size                     = UDim2.new(1, 0, 0, 40),
 		CanvasSize               = UDim2.new(0, 0, 0, 0),
 		ScrollBarThickness       = 0,
 		ScrollingDirection       = Enum.ScrollingDirection.X,
@@ -131,7 +132,7 @@ function Eru:Window(cfg)
 		Rotation               = 180,
 		BackgroundTransparency = 1,
 		AnchorPoint            = Vector2.new(0, 0.5),
-		Position               = UDim2.new(0, 68, 0.5, 0),
+		Position               = UDim2.new(0, 4, 0.5, 0),
 		Size                   = ARROW_SIZE,
 		Visible                = false,
 		ZIndex                 = 2,
@@ -160,10 +161,10 @@ function Eru:Window(cfg)
 		btnLeft.Visible  = overflow and not atLeft
 		btnRight.Visible = overflow and not atRight
 
-		local leftOff  = btnLeft.Visible  and 22 or 0
-		local rightOff = btnRight.Visible and 22 or 0
-		tabScroll.Position = UDim2.new(0, 70 + leftOff, 0, 0)
-		tabScroll.Size     = UDim2.new(1, -70 - leftOff - rightOff, 0, 40)
+		local leftOff  = btnLeft.Visible  and 20 or 0
+		local rightOff = btnRight.Visible and 20 or 0
+		tabScroll.Position = UDim2.new(0, leftOff, 0, 0)
+		tabScroll.Size     = UDim2.new(1, -leftOff - rightOff, 0, 40)
 	end
 
 	btnLeft.MouseButton1Click:Connect(function()
@@ -189,15 +190,15 @@ function Eru:Window(cfg)
 	win.tabBar = make("Frame", {
 		Name                   = "TabBar",
 		BackgroundTransparency = 1,
-		Size                   = UDim2.new(0, 0, 1, 0),
-		AutomaticSize          = Enum.AutomaticSize.X,
+		Size                   = UDim2.new(1, 0, 1, 0),
 	}, tabScroll)
 
 	make("UIListLayout", {
-		FillDirection     = Enum.FillDirection.Horizontal,
-		Padding           = UDim.new(0, 8),
-		SortOrder         = Enum.SortOrder.LayoutOrder,
-		VerticalAlignment = Enum.VerticalAlignment.Center,
+		FillDirection       = Enum.FillDirection.Horizontal,
+		Padding             = UDim.new(0, 8),
+		SortOrder           = Enum.SortOrder.LayoutOrder,
+		HorizontalAlignment = Enum.HorizontalAlignment.Center,
+		VerticalAlignment   = Enum.VerticalAlignment.Center,
 	}, win.tabBar)
 
 	make("UIPadding", { PaddingLeft = UDim.new(0, 8), PaddingRight = UDim.new(0, 8) }, win.tabBar)
@@ -252,13 +253,20 @@ function Window:Tab(cfg)
 		TextColor3             = COL_INACTIVE,
 		TextSize               = 13,
 		BackgroundTransparency = 1,
-		Size                   = UDim2.new(0, 56, 0, 30),
+		Size                   = UDim2.new(0, 0, 0, 30),
+		AutomaticSize          = Enum.AutomaticSize.X,
 		LayoutOrder            = tabIndex,
 	}, self.tabBar)
 
+	make("UIPadding", {
+		PaddingLeft  = UDim.new(0, 6),
+		PaddingRight = UDim.new(0, 6),
+	}, label)
+
 	local indicator = make("Frame", {
 		BackgroundColor3 = COL_ACTIVE,
-		Position         = UDim2.new(0.5, -7, 1, -2),
+		AnchorPoint      = Vector2.new(0.5, 1),
+		Position         = UDim2.new(0.5, 0, 1, -2),
 		Size             = UDim2.new(0, 14, 0, 2),
 		Visible          = false,
 	}, label)
